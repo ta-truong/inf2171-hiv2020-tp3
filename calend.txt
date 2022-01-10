@@ -1,0 +1,542 @@
+;*************************************************************************************** 
+; Auteur:     Thuc-An Truong
+;
+; Programme:  CALEND
+;
+;        Ce programme, avec l'emploi de sous-programme, effectue divers 
+;        calculs a partir de l'annee et le mois entres par l'utilisateur  
+;        afin d'afficher le calendrier mensuel demande.
+;
+;***************************************************************************************
+
+;
+;Appelle les sous-programmes necessaires au deroulement du programme
+;
+calend:  CALL    intro
+bclCalen:CALL    sollicit
+         CALL    calculer
+         CALL    resultat 
+         CALL    reinit   
+         BR      bclCalen    ;recommence le programme
+
+;
+;Affiche le message de bienvenue au programme
+;    
+intro:   STRO    msgBvn,d
+         RET0
+
+;
+;Sollicite et valide l'annee et le mois entres par l'utilisateur
+; 
+sollicit:STRO    msgSol,d
+lireCh:  CHARI   car,d
+         LDX     positCar,d
+         ADDX    1,i
+         STX     positCar,d 
+         LDA     avCar,d
+         CPA     '\n',i      ;marque la fin de la chaine de caracteres
+         BREQ    finCh
+         CPA     '0',i       ;erreur si le caractere n'est pas un chiffre
+         BRLT    erreur
+         CPA     '9',i
+         BRGT    erreur
+         CALL    convCh 
+         BR      lireCh
+finCh:   CPX     1,i
+         BREQ    fin
+validAM: LDA     aaaa,d      
+         CPA     1901,i      ;erreur si l'annee < 1901
+         BRLT    erreur
+         CPA     2050,i      ;erreur si l'annee > 2050
+         BRGT    erreur
+         LDA     mm,d
+         CPA     1,i         ;erreur si le mois < 1
+         BRLT    erreur
+         CPA     12,i        ;erreur si le mois > 12
+         BRGT    erreur
+         RET0
+
+;
+;Convertit en decimale l'annee et le mois entres
+;
+convCh:  LDX     positCar,d
+         CPX     4,i         ;annee = 4 premiers caracteres entres
+         BRLE    convAAAA 
+         BR      convMM      ;mois = 2 caracteres suivants l'annee
+convAAAA:CALL    sautConv
+         BREQ    finConv
+         CPA     0,i
+         BREQ    finConv
+         CPX     1,i         ;accumule l'annee avec la valeur en position des milliers
+         BREQ    mult1000    
+         CPX     2,i         ;accumule l'annee avec la valeur en position des centaines
+         BREQ    mult100
+         CPX     3,i         ;accumule l'annee avec la valeur en position des dizaines
+         BREQ    mult10A
+         CPX     4,i         ;accumule l'annee avec la valeur en position des unites
+         BREQ    ajoutA    
+convMM:  CPX     6,i         ;erreur si le nombre de caracteres > 6
+         BRGT    erreur
+         CALL    sautConv
+         CPX     5,i         ;accumule le mois avec la valeur en position des dizaines
+         BREQ    mult10M
+         CPX     6,i         ;accumule le mois avec la valeur en position des unites
+         BREQ    ajoutM
+         BR      finConv
+mult1000:STA     mcande,d    ;multiplie par 1000
+         LDA     1000,i
+         STA     mcateur,d
+         CALL    multipli
+         CALL    accAAAA 
+         BR      finConv 
+mult100: STA     mcande,d    ;multiplie par 100
+         LDA     100,i
+         STA     mcateur,d
+         CALL    multipli
+         CALL    accAAAA
+         BR      finConv
+mult10A: CALL    mult10      ;multiplie par 10 pour le calcul de l'annee
+ajoutA:  CALL    accAAAA
+         BR      finConv
+mult10M: CALL    mult10      ;multiplie par 10 pour le calcul du mois
+ajoutM:  CALL    accMM
+         BR      finConv
+mult10:  STA     mcande,d
+         LDA     10,i
+         STA     mcateur,d
+         CALL    multipli
+         BR      finConv
+sautConv:SUBA    '0',i       ;pas de calculs lorsque le chiffre = 0
+         CPA     0,i
+finConv: RET0
+
+;
+;Calcule le produit
+;
+multipli:LDA     0,i         ;initialise le produit
+         LDX     mcateur,d
+addition:ADDA    mcande,d
+         SUBX    1,i
+         BRNE    addition 
+         STA     produit,d
+         RET0
+
+;
+;Calcule le quotient et le reste de la division
+;
+division:LDA     0,i         ;initialise le quotient
+         LDX     divdende,d  ;initialise le reste de la division
+soustrac:ADDA    1,i
+         SUBX    divseur,d
+         BRGE    soustrac
+         SUBA    1,i
+         ADDX    divseur,d
+         STA     quotient,d
+         STX     reste,s
+         RET0     
+
+;
+;Appelle les sous-programmes de calcul necessaires a l'affichage du calendrier mensuel
+;
+calculer:CALL    jrsEcoul
+         CALL    premJrMM
+         CALL    nbJrsMM 
+         CALL    premPaie
+         RET0
+
+;
+;Calcule le nombre de jours ecoules depuis le 1er janvier 1900 :
+;
+; aaxx           = aaaa - 1900"
+; jrsEcoul       = aaxx
+;                + entier((aaxx-1)/4)
+;                + entier((((mm-1)*57)+50)/100)
+;                + (mm-1)*30
+;                + jj => 1           
+;
+; Pour les mois > FEV :      si l'annee est bissextile = jrsEcoul-1
+;                            sinon = jrsEcoul-2
+;
+;
+jrsEcoul:LDA     aaaa,d
+         SUBA    1900,i
+         STA     aaxx,d
+         CALL    accJrs 
+         SUBA    1,i
+         STA     divdende,d
+         LDA     4,i
+         STA     divseur,d
+         CALL    division
+         CALL    accJrs 
+         LDA     mm,d
+         SUBA    1,i
+         STA     mcande,d
+         LDA     57,i
+         STA     mcateur,d
+         CALL    multipli
+         ADDA    50,i
+         STA     divdende,d
+         LDA     100,i
+         STA     divseur,d
+         CALL    division
+         CALL    accJrs 
+         LDA     mm,d
+         SUBA    1,i
+         STA     mcande,d
+         LDA     30,i
+         STA     mcateur,d
+         CALL    multipli
+         CALL    accJrs 
+         LDA     1,i
+         CALL    accJrs 
+         LDX     mm,d
+         CPX     2,i         ;ne rien retrancher si le mois = JANV ou FEV
+         BRLE    premJrMM
+         LDA     0,i
+         LDX     aaxx,d      ;annee bissextile si aaxx est divisible par 4
+         ANDX    3,i
+         BREQ    biss
+nonbiss: SUBA    1,i         ;retrancher 2 si l'annee est non bissextile
+biss:    SUBA    1,i         ;retrancher 1 si l'annee est bissextile
+         CALL    accJrs 
+         RET0    
+
+;
+;Calcule le premier jour du mois : jrEcoul mod 7
+;
+premJrMM:LDA     jrEcoul,d 
+         STA     divdende,d
+         LDA     7,i
+         STA     divseur,d
+         CALL    division
+         STX     jrAbs,d     ;0-DIM, 1-LUN, 2-MAR, 3-MER, 4-JEU, 5-VEN, 6-SAM
+         RET0
+
+;
+;Calcule le nombre de jours du mois
+;
+nbJrsMM: LDA     mm,d
+         CPA     2,i         ;FEV = 28 jours minimum
+         BREQ    nbJrs28 
+         CPA     4,i         ;AVR, JUIN, SEPT, NOV = 30 jours
+         BREQ    nbJrs30 
+         CPA     6,i
+         BREQ    nbJrs30 
+         CPA     9,i
+         BREQ    nbJrs30 
+         CPA     11,i
+         BREQ    nbJrs30 
+nbJrs31: LDA     31,i        ;JANV, MARS, MAI, JUIL, AOUT, OCT, DEC = 31 jours
+         STA     nbJrs,d
+         BR      finCalc
+nbJrs28: LDA     28,i
+         STA     nbJrs,d
+         LDX     aaxx,d      ;annee bissextile si aaxx est divisible par 4
+         ANDX    3,i
+         BRNE    fin28
+         ADDA    1,i         ;FEV += 1 jour si l'annee est bissextile
+         STA     nbJrs,d
+fin28:   BR      finCalc
+nbJrs30: LDA     30,i
+         STA     nbJrs,d
+         BR      finCalc
+finCalc: RET0
+
+;
+;Calcule le jour de la premiere paie du mois : jrEcoul mod 14 = 4
+;
+premPaie:LDX     jrAbs,d 
+         CPX     1,i         ;date du premier jeudi = 4 si le premier jour du mois = LUN
+         BREQ    jrPaie4     
+         CPX     2,i         ;date du premier jeudi = 3 si le premier jour du mois = MAR
+         BREQ    jrPaie3
+         CPX     3,i         ;date du premier jeudi = 2 si le premier jour du mois = MER
+         BREQ    jrPaie2
+         CPX     4,i         ;date du premier jeudi = 1 si le premier jour du mois = JEU
+         BREQ    jrPaie1
+         CPX     5,i         ;date du premier jeudi = 7 si le premier jour du mois = VEN
+         BREQ    jrPaie7
+         CPX     6,i         ;date du premier jeudi = 6 si le premier jour du mois = SAM
+         BREQ    jrPaie6
+jrPaie5: LDA     5,i         ;date du premier jeudi = 5 si le premier jour du mois = DIM
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs
+         BR      suitPaie 
+jrPaie4: LDA     4,i
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs
+         BR      suitPaie 
+jrPaie3: LDA     3,i
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs
+         BR      suitPaie 
+jrPaie2: LDA     2,i
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs
+         BR      suitPaie 
+jrPaie1: LDA     1,i
+         STA     jrPaie,d
+         BR      suitPaie 
+jrPaie7: LDA     7,i
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs      
+         BR      suitPaie 
+jrPaie6: LDA     6,i
+         STA     jrPaie,d
+         SUBA    1,i         ;calcul du nombre de jours ecoules depuis le 1er janvier 1900 correspondant
+         CALL    accJrs
+         BR      suitPaie       
+suitPaie:LDA     jrEcoul,d
+         STA     divdende,d
+         LDA     14,i
+         STA     divseur,d
+         CALL    division
+         CPX     4,i         ;correspond a un jour de paie si (jrEcoul mod 14 = 4)
+         BREQ    finPaie
+         LDA     jrPaie,d    ;sinon, le jour de paie = date du prochain jeudi
+         ADDA    7,i
+         STA     jrPaie,d
+finPaie: RET0
+
+;
+;Accumule les valeurs menant a l'annee en decimale
+;
+accAAAA: ADDA    aaaa,d
+         STA     aaaa,d
+         RET0
+
+;
+;Accumule les valeurs menant au mois en decimale
+;
+accMM:   ADDA    mm,d
+         STA     mm,d
+         RET0
+
+;
+;Accumule le nombre de jours ecoules depuis le 1er janvier 1900
+;
+accJrs:  ADDA    jrEcoul,d 
+         STA     jrEcoul,d 
+         RET0
+
+;
+;Appelle les sous-programmes necessaires a l'affichage du calendrier
+;
+resultat:CALL    affMA
+         CALL    affSem
+         CALL    affJJ
+         CALL    affPaie
+         RET0
+
+;
+;Affiche le mois et l'annee
+;
+affMA:   CALL    nouvLign
+         LDX     mm,d        ;calcul de l'index de tabMM correspondant au mois = (mm-1)*2
+         SUBX    1,i         
+         ASLX    
+         LDA     tabMM,x
+         STA     adresse,d 
+         STRO    adresse,n
+         DECO    aaaa,d
+         CHARO   '\n',i 
+         RET0
+
+;
+;Affiche les jours de la semaine
+;
+affSem:  CALL    nouvLign
+         CALL    doubEsp
+         CHARO   'D',i
+         CALL    doubEsp
+         CHARO   'L',i
+         CALL    doubEsp
+         CHARO   'M',i
+         CALL    doubEsp
+         CHARO   'M',i
+         CALL    doubEsp
+         CHARO   'J',i
+         CALL    doubEsp
+         CHARO   'V',i
+         CALL    doubEsp
+         CHARO   'S',i
+         CHARO   '\n',i
+         RET0    
+
+;
+;Affiche les jours du mois
+;
+affJJ:   CALL    nouvLign
+         LDA     jrAbs,d     ;alignement necessaire pour le debut du mois = jrAbs*3 
+         ASLA
+         ADDA    jrAbs,d 
+         STA     nbEspAff,d 
+         CALL    espaces
+bclJJ:   LDA     jrAbs,d 
+         ADDA    1,i
+         STA     jrAbs,d 
+         CPA     7,i         ;nouvelle semaine lorsqu'on arrive a dimanche
+         BRLE    suitJJ1     ;sinon, meme semaine
+         CALL    nouvLign
+         LDA     1,i         ;reinitialise le jour de la semaine
+         STA     jrAbs,d 
+suitJJ1: LDA     nbJrsAff,d  
+         ADDA    1,i
+         STA     nbJrsAff,d 
+         CPA     1,i         ;alignement necessaire lorsqu'il s'agit du premier jour du mois
+         BRNE    suitJJ2
+         LDA     jrAbs,d 
+         CPA     1,i         ;alignement necessaire lorsque le jour de la semaine = DIM
+         BREQ    suitJJ3
+suitJJ2: LDA     nbJrsAff,d 
+         CPA     9,i         ;alignement necessaires lorsque la date est entre 1 et 9 ou a partir de 10
+         BRGT    suitJJ3     
+         CHARO   ' ',i       
+suitJJ3: CHARO   ' ',i       
+         LDA     jj,d        ;date a afficher
+         ADDA    1,i         
+         STA     jj,d
+         DECO    jj,d
+         CPA     nbJrs,d     ;affiche toutes les dates du mois
+         BRLT    bclJJ
+         CHARO   '\n',i
+         CALL    nouvLign
+         STRO    msgPaie,d
+         RET0
+
+;
+;Affiche les jours de paie
+;
+affPaie: LDA     jrPaie,d
+bclPaie: DECO    jrPaie,d
+         ADDA    14,i        ;frequence des paies = au 2 semaines
+         STA     jrPaie,d
+         CPA     nbJrs,d
+         BRGT    finResul
+         CHARO   ',',i
+         BR      bclPaie
+finResul:RET0
+
+;
+;Affiche une nouvelle ligne et/ou des espaces
+;
+nouvLign:CHARO   '\n',i
+         LDA     5,i
+         STA     nbEspAff,d 
+         BR      espaces
+doubEsp: LDA     2,i
+         STA     nbEspAff,d 
+espaces: LDA     0,i
+bclEsp:  CHARO   ' ',i
+         ADDA    1,i
+         CPA     nbEspAff,d  ;affiche le nombre d'espaces necessaires
+         BRLT    bclEsp
+         RET0
+
+;
+;Affiche le message d'erreur
+;
+erreur:  STRO    msgErr,d
+         CALL    reinit
+         BR      bclCalen
+
+;
+;Reinitialise diverses variables et vide le tampon d'entree
+;
+reinit:  LDA     0,i
+         STA     positCar,d
+         STA     aaaa,d
+         STA     mm,d
+         STA     jrEcoul,d 
+         STA     nbJrsAff,d 
+         STA     jj,d
+reinTamp:LDA     avCar,d
+         CPA     '\n',i      ;jusqu'a ce qu'on lit un '\n'
+         BREQ    finRein
+         CHARI   car,d 
+         BR      reinTamp
+finRein: RET0
+
+;
+;Termine le programme
+;
+fin:     STRO    msgFin,d
+         STOP
+
+;***************************************************************************************
+; Variables et constantes
+;***************************************************************************************
+
+avCar:   .BLOCK  1
+car:     .BLOCK  1
+positCar:.BLOCK  2
+
+adresse: .BLOCK  2           
+
+nbJrs:   .BLOCK  2
+nbJrsAff:.BLOCK  2
+nbEspAff:.BLOCK  2
+
+aaaa:    .BLOCK  2
+mm:      .BLOCK  2
+jj:      .BLOCK  2  
+
+aaxx:    .BLOCK  2
+jrEcoul: .BLOCK  2
+jrAbs:   .BLOCK  2
+jrPaie:  .BLOCK  2
+
+mcateur: .BLOCK  2
+mcande:  .BLOCK  2
+produit: .BLOCK  2
+
+divseur: .BLOCK  2
+divdende:.BLOCK  2
+quotient:.BLOCK  2
+reste:   .BLOCK  2
+
+msgBvn:  .ASCII  "Bienvenue à ce programme qui affiche le calendrier"
+         .ASCII  "\npour le mois d'une année désiré.\x00" 
+
+msgSol:  .ASCII  "\n\n\nVeuillez entrer une année (entre 1901 et 2050)"
+         .ASCII  "\nsuivie d'un mois (AAAAMM) (ou entrez uniquement"
+         .ASCII  "\nle caractère ENTREE pour terminer) :\n\n\x00"
+
+msgPaie: .ASCII  " Jours de paie: \x00"
+
+msgErr:  .ASCII  "\nEntrée invalide.\x00" 
+
+msgFin:  .ASCII  "\nFin normale du programme.\x00"
+
+tabMM:   .ADDRSS janv 
+         .ADDRSS fev
+         .ADDRSS mars
+         .ADDRSS avr
+         .ADDRSS mai
+         .ADDRSS juin
+         .ADDRSS juil
+         .ADDRSS aout
+         .ADDRSS sept
+         .ADDRSS oct
+         .ADDRSS nov
+         .ADDRSS dec
+
+janv:    .ASCII "     Janvier \x00"
+fev:     .ASCII "     Février \x00"
+mars:    .ASCII "       Mars \x00"
+avr:     .ASCII "      Avril \x00"
+mai:     .ASCII "       Mai \x00"
+juin:    .ASCII "       Juin \x00"
+juil:    .ASCII "     Juillet \x00"
+aout:    .ASCII "       Août \x00"
+sept:    .ASCII "    Septembre \x00"
+oct:     .ASCII "     Octobre \x00"
+nov:     .ASCII "     Novembre \x00"
+dec:     .ASCII "     Décembre \x00"
+
+.END
